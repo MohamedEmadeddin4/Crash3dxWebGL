@@ -1,6 +1,17 @@
 using UnityEngine;
+using System; 
 using System.Collections;
+using System.Net.WebSockets;
+using System.Threading;
+using System.Threading.Tasks;
 using TMPro;
+using System.Net.Http;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
+using System.Text;
+
+
+
 
 public class Timer : MonoBehaviour
 {
@@ -20,22 +31,28 @@ public class Timer : MonoBehaviour
     private float countdownValue = 7f;
     private bool isCounterComplete = false;
     private bool isGenerating = false;
+    private string gameStatus = "init";
+    private ClientWebSocket ws = new ClientWebSocket();
+    private CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+    private Task webSocketTask;
 
     private void Start()
     {
         BackgroundScroller.Instance.StopScrolling();
         anim.Play("Idle");
         VFX.SetActive(true);
-        GenerateRandomNumber();
+        // GenerateRandomNumber();
+        LaunchGameAndConnectWebSocket();
     }
 
     private void Update()
     {
-        if (!isGenerating)
+
+        if(gameStatus == "wait")
         {
             HandleCountdown();
         }
-        else
+        else  if(gameStatus == "start")
         {
             HandleCounter();
         }
@@ -43,6 +60,7 @@ public class Timer : MonoBehaviour
 
     private void HandleCountdown()
     {
+        if(gameStatus == "wait")
         countdownValue -= Time.deltaTime;
         if (countdownValue <= 1f)
         {
@@ -65,51 +83,56 @@ public class Timer : MonoBehaviour
         bets.alpha = 0f;
         countdownValue = 0f;
         isGenerating = true;
-        GenerateRandomNumber();
+        // GenerateRandomNumber();
+        gameStatus = "start";
     }
 
     private void HandleCounter()
     {
-        if (!isCounterComplete && counterValue <= randomNumber)
+        if (gameStatus == "start" && !isCounterComplete )
         {
             UpdateCounter();
         }
-        else if (isCounterComplete)
-        {
-            ResetForNextGeneration();
-        }
+      
     }
 
     private void UpdateCounter()
     {
         counterValue += Time.deltaTime;
         counterText.text = $"{counterValue:F2}x";
-        if (counterValue >= randomNumber)
-        {
-            EndGenerationPhase();
-        }
+       
     }
 
-    private void EndGenerationPhase()
-    {
-        BackgroundScroller.Instance.StopScrolling();
-        anim.Play("Idle");
-        VFX.SetActive(true);
-        vfx2.SetActive(false);
-        counterText.color = Color.red;
-        t2.gameObject.SetActive(false);
-        t1.gameObject.SetActive(true);
-        isCounterComplete = true;
-    }
+private void EndGenerationPhase()
+{
+    BackgroundScroller.Instance.StopScrolling();
+    anim.Play("Crash"); 
+    VFX.SetActive(true);
+    vfx2.SetActive(false);
+    counterText.color = Color.red;
+    t2.gameObject.SetActive(false);
+    t1.gameObject.SetActive(true);
+    isCounterComplete = true;
+    gameStatus = "crash"; 
+}
 
-    private void ResetForNextGeneration()
-    {
-        counterValue = 0f;
-        isCounterComplete = false;
-        isGenerating = false;
-        bets.alpha = 1f;
-        StartCoroutine(ShowAndHideCrashed());
-    }
+
+private void ResetForNextGeneration()
+{
+    countdownValue = 7f;
+    counterValue = 0f; 
+    isCounterComplete = false; 
+    isGenerating = false; 
+    bets.alpha = 1f; 
+    BackgroundScroller.Instance.StopScrolling(); 
+    anim.Play("Idle"); 
+    VFX.SetActive(false); 
+    vfx2.SetActive(false); 
+    counterText.color = Color.white; 
+    counterText.text = "0.00x";
+    gameStatus = "init"; 
+ 
+}
 
     IEnumerator ShowAndHideCrashed()
     {
@@ -125,9 +148,122 @@ public class Timer : MonoBehaviour
 
     private void GenerateRandomNumber()
     {
-        randomNumber = Random.Range(0.2f, 1.00f) * 5.5f; // Adjusted for clarity
+        randomNumber = UnityEngine.Random.Range(0.2f, 1.00f) * 5.5f;
         counterText.text = "0.00x";
         counterText.color = Color.white;
-        countdownValue = 7f; // Reset countdown for next generation
+        countdownValue = 7f; 
+    }
+
+    private async Task LaunchGameAndConnectWebSocket()
+    {
+        string requestUri = "https://alienapi.imoon.com/api/stage/v2/fun-launch";
+        string requestData = "{\"balance\":1000,\"gameId\":\"1001\",\"currency\":\"USD\",\"nickname\":\"amanda\",\"lang\":\"en\",\"extraData\":{}}";
+
+        using (var httpClient = new HttpClient())
+        {
+            var requestContent = new StringContent(requestData, Encoding.UTF8, "application/json");
+            HttpResponseMessage response = await httpClient.PostAsync(requestUri, requestContent);
+
+            if (response.IsSuccessStatusCode)
+            {
+                string responseContent = await response.Content.ReadAsStringAsync();
+                JObject jsonResponse = JObject.Parse(responseContent);
+                string gameUrl = jsonResponse["url"].ToString();
+
+                Uri gameUri = new Uri(gameUrl);
+                string fullToken = System.Web.HttpUtility.ParseQueryString(gameUri.Query).Get("token");
+
+                JObject tokenObject = JObject.Parse(fullToken);
+                string connectionToken = tokenObject["connectionToken"].ToString();
+                Debug.Log(connectionToken);
+
+                await ConnectToWebSocket(connectionToken);
+            }
+            else
+            {
+                Debug.LogError("Failed to launch game and obtain WebSocket URL.");
+            }
+        }
+    }
+
+
+    private async Task ConnectToWebSocket(string connectionToken)
+    {
+        try
+        {
+            await ws.ConnectAsync(new Uri(connectionToken), cancellationTokenSource.Token);
+            Debug.Log("WebSocket Connected!");
+            webSocketTask = ReceiveMessages();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"WebSocket connection failed: {ex.Message}");
+        }
+    }
+
+    private async Task ReceiveMessages()
+    {
+        var buffer = new byte[1024 * 4];
+
+       
+            while (ws.State == WebSocketState.Open)
+            {
+                var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationTokenSource.Token);
+                var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                Debug.Log("Received: " + message);
+
+                ProcessReceivedMessage(message);
+            }
+        
+    }
+
+    private void ProcessReceivedMessage(string message)
+{
+    JObject messageObject = null;
+    try
+    {
+        messageObject = JObject.Parse(message);
+    }
+    catch (JsonReaderException ex)
+    {
+        Debug.LogError($"Invalid JSON received: {message}. Error: {ex.Message}");
+        return; 
+    }
+
+    string messageType = messageObject["type"]?.ToString();
+   Debug.LogWarning("Received  message type: " + messageType);
+    switch (messageType)
+    {
+        case "crash":
+             EndGenerationPhase();
+            break;
+        case "start":
+            StartGenerationPhase(); 
+            break;
+        case "wait":
+        if(gameStatus != "wait")
+            gameStatus = "wait";
+            break;
+        case "new-round":
+            ResetForNextGeneration(); 
+            break;    
+        default:
+            break;
+    }
+}
+
+
+
+    private void OnDestroy()
+    {
+        if (ws != null)
+        {
+            cancellationTokenSource.Cancel(); 
+            if (ws.State == WebSocketState.Open)
+            {
+                ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+            }
+            ws.Dispose();
+        }
     }
 }

@@ -1,5 +1,8 @@
+using System;
+using System.Text;
 using UnityEngine;
 using TMPro;
+
 
 public class GameManager : MonoBehaviour
 {
@@ -9,13 +12,17 @@ public class GameManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI nameLabel;
 
     private float timer;
-    private const float UpdateInterval = 5f; // Use a constant for fixed values
+    private bool isGameActive = false;
+    private const float UpdateInterval = 5f;
 
-    private void Start()
+
+    private async void Start()
     {
-        // Initialize the UI elements immediately when the game starts
+
         UpdateTimeDisplay();
         UpdateRandomNumberDisplay();
+
+    
     }
 
     private void Update()
@@ -26,24 +33,28 @@ public class GameManager : MonoBehaviour
         {
             UpdateTimeDisplay();
             UpdateRandomNumberDisplay();
-            timer = 0f; // Reset the timer
+            timer = 0f; 
         }
     }
 
     public void DisplayEnteredName()
     {
-        nameLabel.text = nameInputField.text; // Directly use the text from input
+        nameLabel.text = nameInputField.text;
     }
-
+    public async void GameActivate()  {
+        isGameActive = true; 
+        nameLabel.text = nameInputField.text;
+        
+    }
     private void UpdateTimeDisplay()
     {
-        // Use DateTime.Now for the current time and format it in "HH:mm" for hours and minutes
-        timeText.text = System.DateTime.Now.ToString("HH:mm");
+        timeText.text = DateTime.Now.ToString("HH:mm");
     }
 
     private void UpdateRandomNumberDisplay()
     {
-        // Random.Range is inclusive for int, so 79 to 92 will never actually produce 92, making it 79-91
-        randomNumText.text = Random.Range(79, 92).ToString();
+        randomNumText.text = UnityEngine.Random.Range(79, 92).ToString();
     }
+
+  
 }
