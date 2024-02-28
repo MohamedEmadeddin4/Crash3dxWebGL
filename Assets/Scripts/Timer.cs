@@ -56,6 +56,7 @@ public class Timer : MonoBehaviour
         {
             HandleCounter();
         }
+
     }
 
     private void HandleCountdown()
@@ -103,36 +104,36 @@ public class Timer : MonoBehaviour
        
     }
 
-private void EndGenerationPhase()
-{
-    BackgroundScroller.Instance.StopScrolling();
-    anim.Play("Crash"); 
-    VFX.SetActive(true);
-    vfx2.SetActive(false);
-    counterText.color = Color.red;
-    t2.gameObject.SetActive(false);
-    t1.gameObject.SetActive(true);
-    isCounterComplete = true;
-    gameStatus = "crash"; 
-}
+    private void EndGenerationPhase()
+    {
+        BackgroundScroller.Instance.StopScrolling();
+        anim.Play("Crash");
+        VFX.SetActive(true);
+        vfx2.SetActive(false);
+        counterText.color = Color.red;
+        t2.gameObject.SetActive(false);
+        t1.gameObject.SetActive(true);
+        isCounterComplete = true;
+        gameStatus = "crash";
+    }
 
 
-private void ResetForNextGeneration()
-{
-    countdownValue = 7f;
-    counterValue = 0f; 
-    isCounterComplete = false; 
-    isGenerating = false; 
-    bets.alpha = 1f; 
-    BackgroundScroller.Instance.StopScrolling(); 
-    anim.Play("Idle"); 
-    VFX.SetActive(false); 
-    vfx2.SetActive(false); 
-    counterText.color = Color.white; 
-    counterText.text = "0.00x";
-    gameStatus = "init"; 
- 
-}
+    private void ResetForNextGeneration()
+    {
+        countdownValue = 7f;
+        counterValue = 0f;
+        isCounterComplete = false;
+        isGenerating = false;
+        bets.alpha = 1f;
+        BackgroundScroller.Instance.StopScrolling();
+        anim.Play("Idle");
+        VFX.SetActive(false);
+        vfx2.SetActive(false);
+        counterText.color = Color.white;
+        counterText.text = "0.00x";
+        gameStatus = "init";
+
+    }
 
     IEnumerator ShowAndHideCrashed()
     {
@@ -218,39 +219,39 @@ private void ResetForNextGeneration()
     }
 
     private void ProcessReceivedMessage(string message)
-{
-    JObject messageObject = null;
-    try
     {
-        messageObject = JObject.Parse(message);
-    }
-    catch (JsonReaderException ex)
-    {
-        Debug.LogError($"Invalid JSON received: {message}. Error: {ex.Message}");
-        return; 
-    }
+        JObject messageObject = null;
+        try
+        {
+            messageObject = JObject.Parse(message);
+        }
+        catch (JsonReaderException ex)
+        {
+            Debug.LogError($"Invalid JSON received: {message}. Error: {ex.Message}");
+            return;
+        }
 
-    string messageType = messageObject["type"]?.ToString();
-   Debug.LogWarning("Received  message type: " + messageType);
-    switch (messageType)
-    {
-        case "crash":
-             EndGenerationPhase();
-            break;
-        case "start":
-            StartGenerationPhase(); 
-            break;
-        case "wait":
-        if(gameStatus != "wait")
-            gameStatus = "wait";
-            break;
-        case "new-round":
-            ResetForNextGeneration(); 
-            break;    
-        default:
-            break;
+        string messageType = messageObject["type"]?.ToString();
+        Debug.LogWarning("Received  message type: " + messageType);
+        switch (messageType)
+        {
+            case "crash":
+                EndGenerationPhase();
+                break;
+            case "start":
+                StartGenerationPhase();
+                break;
+            case "wait":
+                if (gameStatus != "wait")
+                    gameStatus = "wait";
+                break;
+            case "new-round":
+                ResetForNextGeneration();
+                break;
+            default:
+                break;
+        }
     }
-}
 
 
 
